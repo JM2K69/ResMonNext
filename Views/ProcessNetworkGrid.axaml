@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ResMonNext.ViewModels"
+             x:Class="ResMonNext.Views.ProcessNetworkGrid"
+             x:DataType="vm:ProcessTable">
+  <DataGrid x:Name="Grid" ItemsSource="{Binding Items}">
+    <DataGrid.Columns>
+      <DataGridTemplateColumn Header="" Width="40" SortMemberPath="Checked" CanUserResize="False">
+        <DataGridTemplateColumn.CellTemplate>
+          <DataTemplate x:DataType="vm:ProcessRow">
+            <CheckBox Classes="row" IsChecked="{Binding IsChecked}" ToolTip.Tip="Filtrer les connexions et ports sur ce processus" />
+          </DataTemplate>
+        </DataGridTemplateColumn.CellTemplate>
+      </DataGridTemplateColumn>
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Image" Binding="{Binding Name}" SortMemberPath="Name" Width="1.6*" MinWidth="120" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.7*" MinWidth="86" CellStyleClasses="num" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Connexions TCP" Binding="{Binding TcpConnections}" SortMemberPath="TcpConnections" Width="1*" MinWidth="140" CellStyleClasses="num" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Ports d'écoute" Binding="{Binding ListeningPorts}" SortMemberPath="ListeningPorts" Width="1*" MinWidth="110" CellStyleClasses="num" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Envoi (o/s)" Binding="{Binding NetSend, StringFormat={}{0:N0}}" SortMemberPath="NetSend" Width="1*" MinWidth="110" CellStyleClasses="num" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Réception (o/s)" Binding="{Binding NetReceive, StringFormat={}{0:N0}}" SortMemberPath="NetReceive" Width="1*" MinWidth="124" CellStyleClasses="num" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Total (o/s)" Binding="{Binding NetTotal, StringFormat={}{0:N0}}" SortMemberPath="NetTotal" Width="1*" MinWidth="110" CellStyleClasses="num" />
+    </DataGrid.Columns>
+  </DataGrid>
+</UserControl>

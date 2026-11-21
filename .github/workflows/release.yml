@@ -1,0 +1,91 @@
+name: Build et release
+
+# Un tag « v1.2.3 » publie une release GitHub avec :
+#   - ResMonNext-<version>-win-x64.exe         : fichier unique autonome (runtime .NET et DLL natives intégrés)
+#   - ResMonNext-<version>-win-x64-aot.zip     : NativeAOT (exe natif + 3 DLL Avalonia), démarrage le plus rapide
+# Les runners Windows de GitHub ont Visual Studio et les outils C++ exigés par NativeAOT.
+on:
+  push:
+    tags: ['v*']
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Version
+        id: version
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { "0.0.0-ci.$env:GITHUB_RUN_NUMBER" }
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Publier en NativeAOT
+        run: >
+          dotnet publish ResMonNext.csproj -c Release -r win-x64 --self-contained true
+          -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none -o out/aot
+
+      - name: Publier en fichier unique autonome
+        run: >
+          dotnet publish ResMonNext.csproj -c Release -r win-x64 --self-contained true
+          -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none
+          -p:PublishAot=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=true -p:PublishReadyToRun=true
+          -o out/single
+
+      - name: Autotests (structures natives, collecte, trace ETW en administrateur)
+        run: |
+          foreach ($kind in 'aot', 'single') {
+            $exe = Resolve-Path "out/$kind/ResMonNext.exe"
+            $report = Join-Path $env:RUNNER_TEMP "selftest-$kind.txt"
+            $process = Start-Process $exe -ArgumentList "--selftest --out `"$report`"" -Wait -PassThru
+            Write-Host "──── $kind (code $($process.ExitCode)) ────"
+            Get-Content $report
+            if ($process.ExitCode -ne 0) { throw "Autotest en échec : $kind" }
+          }
+
+      - name: Empaqueter
+        id: package
+        run: |
+          $version = '${{ steps.version.outputs.value }}'
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item out/single/ResMonNext.exe "dist/ResMonNext-$version-win-x64.exe"
+          Compress-Archive -Path out/aot/* -DestinationPath "dist/ResMonNext-$version-win-x64-aot.zip"
+          Get-ChildItem dist | ForEach-Object { "{0}  {1:N1} Mo" -f $_.Name, ($_.Length / 1MB) }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ResMonNext-${{ steps.version.outputs.value }}
+          path: dist/*
+
+      - name: Release GitHub
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.version.outputs.value }}'
+          $notes = @"
+          ## Téléchargements
+
+          | Fichier | Description |
+          |---|---|
+          | ``ResMonNext-$version-win-x64.exe`` | **Fichier unique autonome** : à copier où vous voulez, aucun .NET requis. |
+          | ``ResMonNext-$version-win-x64-aot.zip`` | **NativeAOT** : démarrage le plus rapide ; garder l'exe et ses 3 DLL ensemble. |
+
+          Windows 10/11 x64. Lancez en administrateur pour l'activité disque par fichier, le trafic réseau par processus,
+          la latence TCP et la recherche de handles dans tous les processus.
+          "@
+          gh release create $env:GITHUB_REF_NAME dist/* --title "ResMon Next $version" --notes $notes --generate-notes

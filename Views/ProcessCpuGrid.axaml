@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ResMonNext.ViewModels"
+             x:Class="ResMonNext.Views.ProcessCpuGrid"
+             x:DataType="vm:ProcessTable">
+  <DataGrid x:Name="Grid" ItemsSource="{Binding Items}">
+    <DataGrid.Columns>
+      <DataGridTemplateColumn Header="" Width="40" SortMemberPath="Checked" CanUserResize="False">
+        <DataGridTemplateColumn.CellTemplate>
+          <DataTemplate x:DataType="vm:ProcessRow">
+            <CheckBox Classes="row" IsChecked="{Binding IsChecked}" ToolTip.Tip="Filtrer sur ce processus" />
+          </DataTemplate>
+        </DataGridTemplateColumn.CellTemplate>
+      </DataGridTemplateColumn>
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Image" Binding="{Binding Name}" SortMemberPath="Name" Width="1.6*" MinWidth="120" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.7*" MinWidth="86" CellStyleClasses="num" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Description" Binding="{Binding Description}" SortMemberPath="Description" Width="2.2*" MinWidth="120" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="État" Binding="{Binding State}" SortMemberPath="State" Width="1.5*" MinWidth="120" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Threads" Binding="{Binding Threads}" SortMemberPath="Threads" Width="0.7*" MinWidth="80" CellStyleClasses="num" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Processeur" Binding="{Binding Cpu, StringFormat={}{0:0}}" SortMemberPath="Cpu" Width="0.9*" MinWidth="100" CellStyleClasses="num" />
+      <DataGridTextColumn x:DataType="vm:ProcessRow" Header="Moyenne UC" Binding="{Binding CpuAverage, StringFormat={}{0:0.00}}" SortMemberPath="CpuAverage" Width="1*" MinWidth="110" CellStyleClasses="num" />
+    </DataGrid.Columns>
+  </DataGrid>
+</UserControl>

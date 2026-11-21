@@ -1,0 +1,664 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ResMonNext.ViewModels"
+        xmlns:ctl="using:ResMonNext.Controls"
+        xmlns:v="using:ResMonNext.Views"
+        xmlns:chrome="using:Avalonia.Controls.Chrome"
+        x:Class="ResMonNext.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="ResMon Next"
+        Icon="/Assets/ResMonNext.ico"
+        Width="1440" Height="920" MinWidth="1000" MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="48"
+        TransparencyLevelHint="Mica"
+        Background="Transparent"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        FontSize="13">
+
+  <Window.Styles>
+    <!-- Avalonia 12 dessine sa propre barre de titre : on garde les boutons système, on masque son titre, son icône et le bouton plein écran -->
+    <Style Selector="chrome|WindowDrawnDecorations TextBlock">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="chrome|WindowDrawnDecorations Image">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector=":is(Control)#PART_FullScreenButton">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <!-- Navigation latérale -->
+    <Style Selector="ListBox.nav">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ListBox.nav > ListBoxItem">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Margin" Value="8,2" />
+      <Setter Property="Padding" Value="12,9" />
+    </Style>
+    <Style Selector="ListBox.nav PathIcon">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+    </Style>
+    <Style Selector="TextBlock.pageTitle">
+      <Setter Property="FontSize" Value="24" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.side, ToggleButton.side">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="12,9" />
+      <Setter Property="Margin" Value="8,2" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="48,*,30" ColumnDefinitions="210,*">
+
+    <!-- ═════════════ Barre de titre (étendue dans la zone système) ═════════════ -->
+    <!-- Colonnes : logo | recherche centrée | réserve pour les boutons système (réduire, agrandir, fermer) -->
+    <Grid x:Name="TitleBar" Grid.ColumnSpan="2" Background="Transparent" ColumnDefinitions="Auto,*,220"
+          chrome:WindowDecorationProperties.ElementRole="TitleBar">
+      <StackPanel Orientation="Horizontal" Spacing="10" Margin="16,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+        <Border Width="24" Height="24" CornerRadius="6" Background="{DynamicResource SystemAccentColor}">
+          <Viewbox Margin="4">
+            <Path Data="M1,12 H6 L9,4 L14,20 L17,10 L19,12 H23" Stroke="White" StrokeThickness="2.4"
+                  StrokeJoin="Round" StrokeLineCap="Round" Width="24" Height="24" />
+          </Viewbox>
+        </Border>
+        <TextBlock Text="ResMon Next" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Text="Moniteur de ressources" Classes="subtle" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBox Grid.Column="1" MaxWidth="460" Margin="24,0" HorizontalAlignment="Stretch" chrome:WindowDecorationProperties.ElementRole="User"
+               Height="32" VerticalAlignment="Center" CornerRadius="16"
+               PlaceholderText="Rechercher un processus, une description ou un PID…"
+               Text="{Binding SearchText}">
+        <TextBox.InnerLeftContent>
+          <PathIcon Width="14" Height="14" Margin="12,0,2,0" Opacity="0.6"
+                    Data="F1 M10,2 A8,8 0 1 0 15.3,16.7 L21,22.4 L22.4,21 L16.7,15.3 A8,8 0 0 0 10,2 Z M10,4 A6,6 0 1 1 10,16 A6,6 0 1 1 10,4 Z" />
+        </TextBox.InnerLeftContent>
+      </TextBox>
+    </Grid>
+
+    <!-- ═════════════ Navigation ═════════════ -->
+    <DockPanel Grid.Row="1" Grid.Column="0" Margin="0,4,0,8">
+      <StackPanel DockPanel.Dock="Bottom" Spacing="2">
+        <ToggleButton Classes="side" IsChecked="{Binding IsPaused}" ToolTip.Tip="Suspendre / reprendre la surveillance">
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <PathIcon Width="16" Height="16" Data="M6,4 H10 V20 H6 Z M14,4 H18 V20 H14 Z" />
+            <TextBlock Text="Pause" />
+          </StackPanel>
+        </ToggleButton>
+        <Button Classes="side" Click="OnRestartElevated" IsVisible="{Binding !IsElevated}"
+                ToolTip.Tip="Nécessaire pour terminer certains processus, gérer les services et (phase 2) le détail disque/réseau">
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <PathIcon Width="16" Height="16" Data="M12,2 L20,5 V11 C20,16 16.5,20 12,22 C7.5,20 4,16 4,11 V5 Z" />
+            <TextBlock Text="Relancer en admin" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+
+      <ListBox x:Name="Nav" Classes="nav" SelectedIndex="0">
+        <ListBoxItem>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <PathIcon Data="M3,3 H10 V10 H3 Z M14,3 H21 V10 H14 Z M3,14 H10 V21 H3 Z M14,14 H21 V21 H14 Z" />
+            <TextBlock Text="Vue d'ensemble" VerticalAlignment="Center" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <PathIcon Data="F1 M6,6 H18 V18 H6 Z M8.5,8.5 V15.5 H15.5 V8.5 Z M9,2 H10.5 V5 H9 Z M13.5,2 H15 V5 H13.5 Z M9,19 H10.5 V22 H9 Z M13.5,19 H15 V22 H13.5 Z M2,9 H5 V10.5 H2 Z M2,13.5 H5 V15 H2 Z M19,9 H22 V10.5 H19 Z M19,13.5 H22 V15 H19 Z" />
+            <TextBlock Text="Processeur" VerticalAlignment="Center" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <PathIcon Data="F1 M2,6 H22 V16 H2 Z M4,8 V14 H20 V8 Z M6,9.5 H9 V12.5 H6 Z M10.5,9.5 H13.5 V12.5 H10.5 Z M15,9.5 H18 V12.5 H15 Z M4,17 H5.5 V20 H4 Z M8,17 H9.5 V20 H8 Z M12,17 H13.5 V20 H12 Z M16,17 H17.5 V20 H16 Z" />
+            <TextBlock Text="Mémoire" VerticalAlignment="Center" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <PathIcon Data="F1 M3,6 H21 V18 H3 Z M5,8 V16 H19 V8 Z M14.5,11 H17 V13 H14.5 Z" />
+            <TextBlock Text="Disque" VerticalAlignment="Center" />
+          </StackPanel>
+        </ListBoxItem>
+        <ListBoxItem>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <PathIcon Data="M2,16 H5 V21 H2 Z M7.5,12 H10.5 V21 H7.5 Z M13,8 H16 V21 H13 Z M18.5,3 H21.5 V21 H18.5 Z" />
+            <TextBlock Text="Réseau" VerticalAlignment="Center" />
+          </StackPanel>
+        </ListBoxItem>
+      </ListBox>
+    </DockPanel>
+
+    <!-- ═════════════ Pages ═════════════ -->
+    <Panel Grid.Row="1" Grid.Column="1" Margin="4,0,16,8">
+
+      <!-- ─────────── Vue d'ensemble ─────────── -->
+      <ScrollViewer x:Name="PageOverview">
+        <StackPanel Spacing="14" Margin="0,4,4,8">
+          <TextBlock Text="Vue d'ensemble" Classes="pageTitle" />
+
+          <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
+            <Border Grid.Column="0" Classes="card kpi" Tag="1" PointerPressed="OnKpiPressed">
+              <StackPanel Spacing="2">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Processeur" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding CpuFrequencyText}" Classes="subtle" />
+                </Grid>
+                <TextBlock Text="{Binding CpuUsageText}" Classes="big" />
+                <Border Classes="graph" Height="80" Margin="0,6,0,0">
+                  <ctl:LiveGraph Model="{Binding CpuGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Classes="card kpi" Tag="2" PointerPressed="OnKpiPressed">
+              <StackPanel Spacing="2">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Mémoire" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding HardFaultsText}" Classes="subtle" />
+                </Grid>
+                <TextBlock Text="{Binding MemoryUsedText}" Classes="big" />
+                <Border Classes="graph" Height="80" Margin="0,6,0,0">
+                  <ctl:LiveGraph Model="{Binding MemoryGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Classes="card kpi" Tag="3" PointerPressed="OnKpiPressed">
+              <StackPanel Spacing="2">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Disque" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding DiskActiveText}" Classes="subtle" />
+                </Grid>
+                <TextBlock Text="{Binding DiskText}" Classes="big" />
+                <Border Classes="graph" Height="80" Margin="0,6,0,0">
+                  <ctl:LiveGraph Model="{Binding DiskGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+            <Border Grid.Column="3" Classes="card kpi" Tag="4" PointerPressed="OnKpiPressed">
+              <StackPanel Spacing="2">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Réseau" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding NetUtilText}" Classes="subtle" />
+                </Grid>
+                <TextBlock Text="{Binding NetText}" Classes="big" />
+                <Border Classes="graph" Height="80" Margin="0,6,0,0">
+                  <ctl:LiveGraph Model="{Binding NetGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+          </Grid>
+
+          <Border Classes="card">
+            <DockPanel>
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                <TextBlock Text="Processus — processeur" Classes="title" />
+                <Border Grid.Column="1" Classes="chip" IsVisible="{Binding HasFilter}">
+                  <TextBlock Text="{Binding FilterText}" FontSize="12" />
+                </Border>
+              </Grid>
+              <v:ProcessCpuGrid DataContext="{Binding OverviewCpu}" Height="300" />
+            </DockPanel>
+          </Border>
+
+          <Border Classes="card">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Top" Text="Processus — mémoire" Classes="title" Margin="0,0,0,8" />
+              <v:ProcessMemoryGrid DataContext="{Binding OverviewMemory}" Height="260" />
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ─────────── Processeur ─────────── -->
+      <Grid x:Name="PageCpu" IsVisible="False" ColumnDefinitions="*,12,340" RowDefinitions="Auto,*">
+        <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="10" Margin="0,4,0,14">
+          <TextBlock Text="Processeur" Classes="pageTitle" VerticalAlignment="Center" />
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding CpuUsageText, StringFormat='Utilisation {0}'}" /></Border>
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding CpuFrequencyText}" /></Border>
+          <Border Classes="chip" IsVisible="{Binding HasFilter}" Background="{DynamicResource SystemAccentColorLight3}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock FontSize="12" Text="{Binding FilterText}" VerticalAlignment="Center" Foreground="Black" />
+              <Button Content="Effacer" Padding="6,0" FontSize="11" Click="OnClearFilter" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <ScrollViewer x:Name="CpuScroll" Grid.Row="1" Grid.Column="0">
+          <StackPanel Spacing="12" Margin="0,0,4,0">
+            <Border Classes="card">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Processus" Classes="title" Margin="0,0,0,8" />
+                <v:ProcessCpuGrid DataContext="{Binding CpuProcesses}" Height="340" />
+              </DockPanel>
+            </Border>
+            <Border Classes="card">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Services" Classes="title" Margin="0,0,0,8" />
+                <DataGrid x:Name="ServicesGrid" ItemsSource="{Binding Services.Items}" Height="240">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn x:DataType="vm:ServiceRow" Header="Nom" Binding="{Binding Name}" SortMemberPath="Name" Width="1.2*" MinWidth="100" />
+                    <DataGridTextColumn x:DataType="vm:ServiceRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.7*" MinWidth="86" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:ServiceRow" Header="Description" Binding="{Binding DisplayName}" SortMemberPath="Description" Width="2*" MinWidth="120" />
+                    <DataGridTextColumn x:DataType="vm:ServiceRow" Header="État" Binding="{Binding State}" SortMemberPath="State" Width="1.3*" MinWidth="110" />
+                    <DataGridTextColumn x:DataType="vm:ServiceRow" Header="Groupe" Binding="{Binding Group}" SortMemberPath="Group" Width="1*" MinWidth="90" />
+                    <DataGridTextColumn x:DataType="vm:ServiceRow" Header="Processeur" Binding="{Binding Cpu, StringFormat={}{0:0}}" SortMemberPath="Cpu" Width="0.8*" MinWidth="100" CellStyleClasses="num" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </DockPanel>
+            </Border>
+            <Border Classes="card">
+              <DockPanel>
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                  <TextBlock Text="Modules associés" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding ModulesHint}" Classes="subtle" />
+                </Grid>
+                <DataGrid x:Name="ModulesGrid" ItemsSource="{Binding Modules.Items}" Height="220">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn x:DataType="vm:ModuleRow" Header="Image" Binding="{Binding Image}" SortMemberPath="Image" Width="1*" MinWidth="100" />
+                    <DataGridTextColumn x:DataType="vm:ModuleRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.7*" MinWidth="86" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:ModuleRow" Header="Nom du module" Binding="{Binding Name}" SortMemberPath="Name" Width="1.2*" MinWidth="110" />
+                    <DataGridTextColumn x:DataType="vm:ModuleRow" Header="Version" Binding="{Binding Version}" SortMemberPath="Version" Width="1*" MinWidth="100" />
+                    <DataGridTextColumn x:DataType="vm:ModuleRow" Header="Chemin complet" Binding="{Binding Path}" SortMemberPath="Path" Width="2.5*" MinWidth="150" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </DockPanel>
+            </Border>
+            <Border Classes="card">
+              <DockPanel>
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,0,0,8">
+                  <TextBlock Text="Handles associés" Classes="title" VerticalAlignment="Center" />
+                  <TextBox x:Name="HandleSearchBox" Grid.Column="1" MaxWidth="360" HorizontalAlignment="Right" Height="30"
+                           PlaceholderText="Rechercher un fichier, une clé, un mutex…" Text="{Binding HandleSearchText}" />
+                  <Button Grid.Column="2" Content="Rechercher" Click="OnSearchHandles" />
+                </Grid>
+                <TextBlock DockPanel.Dock="Top" Text="{Binding HandleStatus}" Classes="subtle" Margin="0,0,0,6" />
+                <DataGrid x:Name="HandlesGrid" ItemsSource="{Binding Handles.Items}" Height="240">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn x:DataType="vm:HandleRow" Header="Image" Binding="{Binding Image}" SortMemberPath="Image" Width="1*" MinWidth="110" />
+                    <DataGridTextColumn x:DataType="vm:HandleRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.5*" MinWidth="86" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:HandleRow" Header="Type" Binding="{Binding Type}" SortMemberPath="Type" Width="0.7*" MinWidth="90" />
+                    <DataGridTextColumn x:DataType="vm:HandleRow" Header="Nom du handle" Binding="{Binding Name}" SortMemberPath="Name" Width="3*" MinWidth="200" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </DockPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Row="1" Grid.Column="2">
+          <StackPanel Spacing="12">
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Processeur — total" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding CpuUsageText}" Classes="title" />
+                </Grid>
+                <Border Classes="graph" Height="150">
+                  <ctl:LiveGraph Model="{Binding CpuGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+                <WrapPanel ItemSpacing="14">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Width="10" Height="10" CornerRadius="2" Background="#16A34A" />
+                    <TextBlock Text="Utilisation" Classes="subtle" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Width="10" Height="10" CornerRadius="2" Background="#2563EB" />
+                    <TextBlock Text="Fréquence max." Classes="subtle" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Width="10" Height="10" CornerRadius="2" Background="#F59E0B" />
+                    <TextBlock Text="Processus filtrés" Classes="subtle" />
+                  </StackPanel>
+                </WrapPanel>
+              </StackPanel>
+            </Border>
+            <ItemsControl ItemsSource="{Binding Cores}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Columns="2" ColumnSpacing="10" RowSpacing="10" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:CoreGraph">
+                  <Border Classes="card" Padding="10,8">
+                    <StackPanel Spacing="6">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Title}" FontSize="12" />
+                        <TextBlock Grid.Column="1" Text="{Binding UsageText}" FontSize="12" FontWeight="SemiBold" />
+                      </Grid>
+                      <Border Classes="graph" Height="54">
+                        <ctl:LiveGraph Model="{Binding Graph}" ShowScale="False" GridBrush="{DynamicResource GraphGridBrush}" />
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+
+      <!-- ─────────── Mémoire ─────────── -->
+      <Grid x:Name="PageMemory" IsVisible="False" ColumnDefinitions="*,12,340" RowDefinitions="Auto,*">
+        <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="10" Margin="0,4,0,14">
+          <TextBlock Text="Mémoire" Classes="pageTitle" VerticalAlignment="Center" />
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding MemoryUsedText, StringFormat='Utilisée {0}'}" /></Border>
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding CommitText}" /></Border>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" Grid.Column="0">
+          <StackPanel Spacing="12" Margin="0,0,4,0">
+            <Border Classes="card">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Processus" Classes="title" Margin="0,0,0,8" />
+                <v:ProcessMemoryGrid DataContext="{Binding MemoryProcesses}" Height="380" />
+              </DockPanel>
+            </Border>
+            <Border Classes="card">
+              <StackPanel Spacing="14">
+                <TextBlock Text="Mémoire physique" Classes="title" />
+                <ctl:MemoryBar Segments="{Binding MemorySegments}" Height="30" />
+                <ItemsControl ItemsSource="{Binding MemoryLegend}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <UniformGrid Columns="5" ColumnSpacing="10" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LegendItem">
+                      <StackPanel Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <Border Width="10" Height="10" CornerRadius="2" Background="{Binding Brush}" VerticalAlignment="Center" />
+                          <TextBlock Text="{Binding Label}" Classes="subtle" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Value}" FontSize="16" FontWeight="SemiBold" Margin="16,0,0,0" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                  <StackPanel Grid.Column="0"><TextBlock Text="Disponible" Classes="subtle" /><TextBlock Text="{Binding AvailableText}" FontWeight="SemiBold" /></StackPanel>
+                  <StackPanel Grid.Column="1"><TextBlock Text="En cache" Classes="subtle" /><TextBlock Text="{Binding CachedText}" FontWeight="SemiBold" /></StackPanel>
+                  <StackPanel Grid.Column="2"><TextBlock Text="Total" Classes="subtle" /><TextBlock Text="{Binding TotalText}" FontWeight="SemiBold" /></StackPanel>
+                  <StackPanel Grid.Column="3"><TextBlock Text="Installée" Classes="subtle" /><TextBlock Text="{Binding InstalledText}" FontWeight="SemiBold" /></StackPanel>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Row="1" Grid.Column="2">
+          <StackPanel Spacing="12">
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Mémoire physique utilisée" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding MemoryUsedText}" Classes="title" />
+                </Grid>
+                <Border Classes="graph" Height="120">
+                  <ctl:LiveGraph Model="{Binding MemoryGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Charge de validation" Classes="title" />
+                <Border Classes="graph" Height="120">
+                  <ctl:LiveGraph Model="{Binding CommitGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Défauts matériels" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding HardFaultsText}" Classes="subtle" />
+                </Grid>
+                <Border Classes="graph" Height="120">
+                  <ctl:LiveGraph Model="{Binding HardFaultGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+
+      <!-- ─────────── Disque ─────────── -->
+      <Grid x:Name="PageDisk" IsVisible="False" ColumnDefinitions="*,12,340" RowDefinitions="Auto,*">
+        <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="10" Margin="0,4,0,14">
+          <TextBlock Text="Disque" Classes="pageTitle" VerticalAlignment="Center" />
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding DiskText}" /></Border>
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding DiskActiveText}" /></Border>
+          <Border Classes="chip" IsVisible="{Binding HasFilter}" Background="{DynamicResource SystemAccentColorLight3}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock FontSize="12" Text="{Binding FilterText}" VerticalAlignment="Center" Foreground="Black" />
+              <Button Content="Effacer" Padding="6,0" FontSize="11" Click="OnClearFilter" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" Grid.Column="0">
+          <StackPanel Spacing="12" Margin="0,0,4,0">
+            <Border Classes="card">
+              <DockPanel>
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                  <TextBlock Text="{Binding DiskProcessesTitle}" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding DiskProcessesHint}" Classes="subtle" />
+                </Grid>
+                <v:ProcessDiskGrid DataContext="{Binding DiskProcesses}" Height="360" />
+              </DockPanel>
+            </Border>
+            <Border Classes="card">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Stockage" Classes="title" Margin="0,0,0,8" />
+                <DataGrid x:Name="StorageGrid" ItemsSource="{Binding Storage.Items}" MaxHeight="220">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn x:DataType="vm:StorageRow" Header="Disque logique" Binding="{Binding Name}" SortMemberPath="Name" Width="1*" MinWidth="110" />
+                    <DataGridTextColumn x:DataType="vm:StorageRow" Header="Disque physique" Binding="{Binding Physical}" SortMemberPath="Physical" Width="1*" MinWidth="120" />
+                    <DataGridTextColumn x:DataType="vm:StorageRow" Header="Temps actif (%)" Binding="{Binding Active, StringFormat={}{0:0}}" SortMemberPath="Active" Width="1*" MinWidth="120" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:StorageRow" Header="Espace disponible (Mo)" Binding="{Binding FreeMb, StringFormat={}{0:N0}}" SortMemberPath="Free" Width="1.2*" MinWidth="150" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:StorageRow" Header="Espace total (Mo)" Binding="{Binding TotalMb, StringFormat={}{0:N0}}" SortMemberPath="Total" Width="1.2*" MinWidth="130" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:StorageRow" Header="File d'attente" Binding="{Binding Queue, StringFormat={}{0:0.00}}" SortMemberPath="Queue" Width="1*" MinWidth="110" CellStyleClasses="num" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </DockPanel>
+            </Border>
+            <Border Classes="card" IsVisible="{Binding EtwActive}">
+              <DockPanel>
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                  <TextBlock Text="Activité du disque" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="Par fichier · actifs depuis 60 s" Classes="subtle" />
+                </Grid>
+                <DataGrid x:Name="FilesGrid" ItemsSource="{Binding Files.Items}" Height="320">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn x:DataType="vm:FileRow" Header="Image" Binding="{Binding Image}" SortMemberPath="Image" Width="1.1*" MinWidth="110" />
+                    <DataGridTextColumn x:DataType="vm:FileRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.6*" MinWidth="86" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:FileRow" Header="Fichier" Binding="{Binding File}" SortMemberPath="File" Width="3*" MinWidth="200" />
+                    <DataGridTextColumn x:DataType="vm:FileRow" Header="Lecture (o/s)" Binding="{Binding Read, StringFormat={}{0:N0}}" SortMemberPath="Read" Width="0.9*" MinWidth="110" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:FileRow" Header="Écriture (o/s)" Binding="{Binding Write, StringFormat={}{0:N0}}" SortMemberPath="Write" Width="0.9*" MinWidth="116" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:FileRow" Header="Total (o/s)" Binding="{Binding Total, StringFormat={}{0:N0}}" SortMemberPath="Total" Width="0.9*" MinWidth="104" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:FileRow" Header="Priorité E/S" Binding="{Binding Priority}" SortMemberPath="Priority" Width="0.8*" MinWidth="104" />
+                    <DataGridTextColumn x:DataType="vm:FileRow" Header="Temps de réponse (ms)" Binding="{Binding Response, StringFormat={}{0:0.0}}" SortMemberPath="Response" Width="0.9*" MinWidth="150" CellStyleClasses="num" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </DockPanel>
+            </Border>
+            <Border Classes="card" IsVisible="{Binding !EtwActive}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Activité du disque par fichier" Classes="title" />
+                  <TextBlock Classes="subtle" TextWrapping="Wrap" Text="Le détail fichier par fichier (débits, priorité d'E/S, temps de réponse) et l'activité disque réelle par processus utilisent la trace du noyau, qui exige les droits administrateur. Sans eux, les colonnes ci-dessus comptent toutes les E/S du processus." />
+                  <TextBlock Classes="subtle" TextWrapping="Wrap" Text="{Binding EtwStatus}" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="accent" VerticalAlignment="Center" Content="Relancer en admin" Click="OnRestartElevated" IsVisible="{Binding !IsElevated}" />
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Row="1" Grid.Column="2">
+          <StackPanel Spacing="12">
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Débit disque" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding DiskText}" Classes="title" />
+                </Grid>
+                <Border Classes="graph" Height="130">
+                  <ctl:LiveGraph Model="{Binding DiskGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Temps actif" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding DiskActiveText}" Classes="subtle" />
+                </Grid>
+                <Border Classes="graph" Height="130">
+                  <ctl:LiveGraph Model="{Binding DiskActiveGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+
+      <!-- ─────────── Réseau ─────────── -->
+      <Grid x:Name="PageNetwork" IsVisible="False" ColumnDefinitions="*,12,290" RowDefinitions="Auto,*">
+        <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="10" Margin="0,4,0,14">
+          <TextBlock Text="Réseau" Classes="pageTitle" VerticalAlignment="Center" />
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding NetText}" /></Border>
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding NetUtilText}" /></Border>
+          <Border Classes="chip"><TextBlock FontSize="12" Text="{Binding NetworkSummary}" /></Border>
+          <Border Classes="chip" IsVisible="{Binding HasFilter}" Background="{DynamicResource SystemAccentColorLight3}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock FontSize="12" Text="{Binding FilterText}" VerticalAlignment="Center" Foreground="Black" />
+              <Button Content="Effacer" Padding="6,0" FontSize="11" Click="OnClearFilter" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <ScrollViewer x:Name="NetScroll" Grid.Row="1" Grid.Column="0">
+          <StackPanel Spacing="12" Margin="0,0,4,0">
+            <Border Classes="card">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Processus avec activité réseau" Classes="title" Margin="0,0,0,8" />
+                <v:ProcessNetworkGrid DataContext="{Binding NetworkProcesses}" Height="300" />
+              </DockPanel>
+            </Border>
+            <Border Classes="card" IsVisible="{Binding EtwActive}">
+              <DockPanel>
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                  <TextBlock Text="Activité réseau" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="Par processus et adresse distante · actifs depuis 60 s" Classes="subtle" />
+                </Grid>
+                <DataGrid x:Name="AddressesGrid" ItemsSource="{Binding Addresses.Items}" Height="240">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn x:DataType="vm:AddressRow" Header="Image" Binding="{Binding Image}" SortMemberPath="Image" Width="1.3*" MinWidth="110" />
+                    <DataGridTextColumn x:DataType="vm:AddressRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.6*" MinWidth="86" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:AddressRow" Header="Adresse" Binding="{Binding Address}" SortMemberPath="Address" Width="2*" MinWidth="160" />
+                    <DataGridTextColumn x:DataType="vm:AddressRow" Header="Envoi (o/s)" Binding="{Binding Send, StringFormat={}{0:N0}}" SortMemberPath="Send" Width="1*" MinWidth="110" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:AddressRow" Header="Réception (o/s)" Binding="{Binding Receive, StringFormat={}{0:N0}}" SortMemberPath="Receive" Width="1*" MinWidth="124" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:AddressRow" Header="Total (o/s)" Binding="{Binding Total, StringFormat={}{0:N0}}" SortMemberPath="Total" Width="1*" MinWidth="110" CellStyleClasses="num" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </DockPanel>
+            </Border>
+            <Border Classes="card">
+              <DockPanel>
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                  <TextBlock Text="Connexions TCP" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="Cochez un processus pour filtrer" Classes="subtle" />
+                </Grid>
+                <DataGrid x:Name="ConnectionsGrid" ItemsSource="{Binding Connections.Items}" Height="280">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="Image" Binding="{Binding Image}" SortMemberPath="Image" Width="1.2*" MinWidth="90" />
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.6*" MinWidth="86" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="Adresse locale" Binding="{Binding LocalAddress}" SortMemberPath="LocalAddress" Width="1.3*" MinWidth="100" />
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="Port local" Binding="{Binding LocalPort}" SortMemberPath="LocalPort" Width="0.5*" MinWidth="72" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="Adresse distante" Binding="{Binding RemoteAddress}" SortMemberPath="RemoteAddress" Width="1.3*" MinWidth="100" />
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="Port distant" Binding="{Binding RemotePort}" SortMemberPath="RemotePort" Width="0.5*" MinWidth="84" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="État" Binding="{Binding State}" SortMemberPath="State" Width="0.7*" MinWidth="80" />
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="Perte (%)" Binding="{Binding LossText}" SortMemberPath="Loss" Width="0.5*" MinWidth="76" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:ConnectionRow" Header="Latence (ms)" Binding="{Binding LatencyText}" SortMemberPath="Latency" Width="0.6*" MinWidth="104" CellStyleClasses="num" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </DockPanel>
+            </Border>
+            <Border Classes="card">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Ports d'écoute" Classes="title" Margin="0,0,0,8" />
+                <DataGrid x:Name="ListenersGrid" ItemsSource="{Binding Listeners.Items}" Height="240">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn x:DataType="vm:ListenerRow" Header="Image" Binding="{Binding Image}" SortMemberPath="Image" Width="1.4*" MinWidth="110" />
+                    <DataGridTextColumn x:DataType="vm:ListenerRow" Header="PID" Binding="{Binding Pid}" SortMemberPath="Pid" Width="0.7*" MinWidth="86" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:ListenerRow" Header="Adresse" Binding="{Binding Address}" SortMemberPath="Address" Width="1.6*" MinWidth="130" />
+                    <DataGridTextColumn x:DataType="vm:ListenerRow" Header="Port" Binding="{Binding Port}" SortMemberPath="Port" Width="0.6*" MinWidth="70" CellStyleClasses="num" />
+                    <DataGridTextColumn x:DataType="vm:ListenerRow" Header="Protocole" Binding="{Binding Protocol}" SortMemberPath="Protocol" Width="0.7*" MinWidth="90" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </DockPanel>
+            </Border>
+            <Border Classes="card" IsVisible="{Binding !EtwActive}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Débits par processus, latence et perte de paquets" Classes="title" />
+                  <TextBlock Classes="subtle" TextWrapping="Wrap" Text="Les octets envoyés et reçus par processus et par adresse, la latence et la perte de paquets de chaque connexion utilisent la trace du noyau et les statistiques TCP étendues, qui exigent les droits administrateur." />
+                  <TextBlock Classes="subtle" TextWrapping="Wrap" Text="{Binding EtwStatus}" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="accent" VerticalAlignment="Center" Content="Relancer en admin" Click="OnRestartElevated" IsVisible="{Binding !IsElevated}" />
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Row="1" Grid.Column="2">
+          <StackPanel Spacing="12">
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Débit réseau" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding NetText}" Classes="title" />
+                </Grid>
+                <Border Classes="graph" Height="130">
+                  <ctl:LiveGraph Model="{Binding NetGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Utilisation du réseau" Classes="title" />
+                  <TextBlock Grid.Column="1" Text="{Binding NetUtilText}" Classes="subtle" />
+                </Grid>
+                <Border Classes="graph" Height="130">
+                  <ctl:LiveGraph Model="{Binding NetUtilGraph}" GridBrush="{DynamicResource GraphGridBrush}" LabelBrush="{DynamicResource SubtleTextBrush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </Panel>
+
+    <!-- ═════════════ Barre d'état ═════════════ -->
+    <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{DynamicResource StatusBarBrush}" Padding="16,0">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="{Binding StatusText}" Classes="subtle" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+          <TextBlock Text="{Binding EtwStatus}" Classes="subtle" />
+          <TextBlock Text="Actualisation : 1 s" Classes="subtle" />
+          <TextBlock Text="{Binding ElevationText}" Classes="subtle" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>
