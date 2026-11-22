@@ -24,12 +24,9 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-| Fichier | Contenu |
-|---|---|
-| `ResMonNext-<version>-win-x64.exe` | fichier unique autonome : runtime .NET et DLL natives intégrés, à copier n'importe où |
-| `ResMonNext-<version>-win-x64-aot.zip` | NativeAOT : exe natif + 3 DLL Avalonia (Skia, HarfBuzz, ANGLE), démarrage le plus rapide |
-
-Chaque build exécute l'autotest des deux exécutables (en administrateur sur le runner, donc trace ETW comprise).
+La release contient `ResMonNext-<version>-win-x64.exe` : un fichier unique autonome (runtime .NET et DLL natives
+intégrés, code taillé et précompilé), à copier n'importe où. Chaque build exécute son autotest (en administrateur
+sur le runner, donc trace ETW comprise). La version NativeAOT reste disponible en local (`build.ps1 -Aot`).
 
 ## Couverture de resmon
 
@@ -49,7 +46,7 @@ Chaque build exécute l'autotest des deux exécutables (en administrateur sur le
 | Réseau : processus, connexions TCP, ports d'écoute TCP/UDP | ✅ | GetExtendedTcpTable / UdpTable |
 | Réseau : octets envoyés/reçus par processus et par adresse, perte de paquets | ✅ en admin | trace ETW du noyau (TcpIp, UdpIp) |
 | Réseau : latence par connexion | ✅ en admin | statistiques TCP étendues (ESTATS) |
-| Réseau : état du pare-feu des ports d'écoute | ⏳ phase 3 | INetFwPolicy2 (COM) |
+| Réseau : état du pare-feu des ports d'écoute | ✅ | règles HNetCfg.FwPolicy2 évaluées par ResMon Next (lecture seule) |
 | Terminer processus / arborescence, suspendre, reprendre, rechercher en ligne | ✅ | TerminateProcess, NtSuspendProcess |
 | Analyser la chaîne d'attente | ✅ | Wait Chain Traversal |
 | Filtre par cases à cocher partagé entre onglets | ✅ | — |
@@ -77,4 +74,11 @@ ouverts avant le démarrage (« rundown ») ; quelques fichiers peuvent rester s
 
 - Au-delà de 64 processeurs logiques, seuls ceux du groupe courant sont affichés.
 - Sans droits administrateur, l'onglet Disque compte toutes les E/S du processus (fichiers, disque, réseau).
-- État du pare-feu des ports d'écoute : non implémenté.
+- État du pare-feu : l'API historique `INetFwMgr.IsPortAllowed` (probablement utilisée par resmon) répond « autorisé »
+  pour tout sur Windows 11, même pour un programme inexistant. ResMon Next évalue donc lui-même les règles entrantes
+  actives du profil courant (protocole, port, programme, service, blocage prioritaire, action par défaut) :
+  - les règles des applications empaquetées (Store, Teams, Game Bar…) sont ignorées, car elles ne visent que leur application ;
+  - les mots-clés de ports sont approximés (`RPC` = ports dynamiques 49152-65535, `RPC-EpMap` = 135…) ;
+  - un port en écoute sur l'adresse de bouclage est affiché « Non filtré » ;
+  - sans droits administrateur, le chemin de certains processus système est déduit de System32, sinon l'état est « Indéterminé » ;
+  - les règles déployées par GPO n'ont pas pu être vérifiées (aucune sur le poste de test) : l'API COM lit le magasin local.

@@ -128,6 +128,7 @@ public sealed unsafe class Sampler : IDisposable
         double diskIdle = _diskIdle?.Read() ?? double.NaN;
         bool slowTick = _tick % 2 == 1;
         var network = slowTick ? NetworkSampler.Collect(latency: _trace is not null) : default;
+        var services = slowTick ? _services.Enumerate() : null;
         if (_trace is not null && _threadMap is not null) _trace.SampledThreads = _threadMap;
         var etw = _trace?.Take();
         double netBytes = _netBytes?.ReadSum() ?? double.NaN;
@@ -149,9 +150,10 @@ public sealed unsafe class Sampler : IDisposable
             ProcessCount = processCount,
             ThreadCount = threadCount,
             HandleCount = handleCount,
-            Services = slowTick ? _services.Enumerate() : null,
+            Services = services,
             Connections = network.Connections,
-            Listeners = network.Listeners,
+            Listeners = network.Listeners is null ? null
+                : FirewallStatus.Annotate(network.Listeners, PathsByPid(processes), ServicesByPid(services)),
             Volumes = slowTick ? CollectVolumes() : null,
             Etw = etw,
             LatencyAvailable = _trace is not null && !TcpLatency.IsBroken,
@@ -414,6 +416,38 @@ public sealed unsafe class Sampler : IDisposable
             CommitLimit = perf.CommitLimit * pageSize,
             ListsAvailable = lists,
         };
+    }
+
+    private static readonly string SystemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+
+    /// <summary>Chemin de chaque processus ; sans droits admin, les processus système sont supposés dans System32.</summary>
+    private static Dictionary<int, string?> PathsByPid(ProcessSample[] processes)
+    {
+        var map = new Dictionary<int, string?>(processes.Length);
+        foreach (var p in processes)
+        {
+            string? path = p.Path;
+            if (path is null && p.Name.Length > 0)
+            {
+                string candidate = System.IO.Path.Combine(SystemDirectory, p.Name);
+                if (File.Exists(candidate)) path = candidate;
+            }
+            map[p.Key.Pid] = path;
+        }
+        return map;
+    }
+
+    /// <summary>Services en cours d'exécution hébergés par chaque processus (règles de pare-feu par service).</summary>
+    private static Dictionary<int, HashSet<string>> ServicesByPid(ServiceSample[]? services)
+    {
+        var map = new Dictionary<int, HashSet<string>>();
+        foreach (var s in services ?? [])
+        {
+            if (s.Pid == 0) continue;
+            if (!map.TryGetValue(s.Pid, out var set)) map[s.Pid] = set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            set.Add(s.Name);
+        }
+        return map;
     }
 
     // ───────────── Volumes (onglet Disque › Stockage) ─────────────

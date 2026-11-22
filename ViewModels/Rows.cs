@@ -212,8 +212,12 @@ public sealed class ConnectionRow(ConnectionSample sample, string image) : Obser
     public string State { get => _state; set => Set(ref _state, value); }
 }
 
-public sealed class ListenerRow(ListenerSample sample, string image)
+public sealed class ListenerRow(ListenerSample sample, string image) : ObservableBase
 {
+    private string _firewall = sample.Firewall;
+
+    public string Firewall { get => _firewall; set => Set(ref _firewall, value); }
+
     public string Key { get; } = sample.Key;
     public string Image { get; } = image;
     public int Pid { get; } = sample.Pid;

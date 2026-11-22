@@ -603,6 +603,7 @@
                     <DataGridTextColumn x:DataType="vm:ListenerRow" Header="Adresse" Binding="{Binding Address}" SortMemberPath="Address" Width="1.6*" MinWidth="130" />
                     <DataGridTextColumn x:DataType="vm:ListenerRow" Header="Port" Binding="{Binding Port}" SortMemberPath="Port" Width="0.6*" MinWidth="70" CellStyleClasses="num" />
                     <DataGridTextColumn x:DataType="vm:ListenerRow" Header="Protocole" Binding="{Binding Protocol}" SortMemberPath="Protocol" Width="0.7*" MinWidth="90" />
+                    <DataGridTextColumn x:DataType="vm:ListenerRow" Header="État du pare-feu" Binding="{Binding Firewall}" SortMemberPath="Firewall" Width="1.6*" MinWidth="190" />
                   </DataGrid.Columns>
                 </DataGrid>
               </DockPanel>
