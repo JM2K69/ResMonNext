@@ -244,7 +244,8 @@ public sealed class MainViewModel : ObservableBase, IDisposable
         {
             if (!aliveListeners.Add(l.Key)) continue;
             listenCount[l.Pid] = listenCount.GetValueOrDefault(l.Pid) + 1;
-            if (!_listenerRows.ContainsKey(l.Key)) _listenerRows[l.Key] = new ListenerRow(l, Image(l.Pid));
+            if (_listenerRows.TryGetValue(l.Key, out var listener)) listener.Firewall = l.Firewall;
+            else _listenerRows[l.Key] = new ListenerRow(l, Image(l.Pid));
         }
         foreach (var key in _listenerRows.Keys.Where(k => !aliveListeners.Contains(k)).ToList()) _listenerRows.Remove(key);
 

@@ -85,6 +85,28 @@ internal static class Program
         var services = snapshots.Select(s => s.Services).LastOrDefault(s => s is not null) ?? [];
         Console.WriteLine($"Services {services.Length}, en cours {services.Count(s => s.State == Win32.SERVICE_RUNNING)}, avec groupe {services.Count(s => s.Group.Length > 0)}");
         var withNet = snapshots.LastOrDefault(s => s.Connections is not null);
+        var firewall = withNet?.Listeners?.GroupBy(l => l.Firewall).Select(g => $"{g.Key} : {g.Count()}") ?? [];
+        Console.WriteLine($"Pare-feu des ports d'écoute : {string.Join(" | ", firewall)}");
+        var names = last.Processes.GroupBy(p => p.Key.Pid).ToDictionary(g => g.Key, g => g.First().Name);
+        foreach (var group in withNet?.Listeners?.GroupBy(l => l.Firewall) ?? [])
+            foreach (var l in group.Take(3))
+                Console.WriteLine($"  {l.Firewall,-26} {l.Protocol} {l.Address}:{l.Port} ({names.GetValueOrDefault(l.Pid, "?")}, PID {l.Pid})");
+        // Contrôles : programme inexistant (aucune règle → refusé si le pare-feu filtre) et bouclage local (jamais filtré).
+        string negative = "", loopback = "";
+        var probe = new Thread(() =>
+        {
+            negative = FirewallStatus.Evaluate(@"C:\ResMonNext-controle\inexistant.exe", 999999, null, tcp: true, null, 54321);
+            loopback = FirewallStatus.Evaluate(@"C:\ResMonNext-controle\inexistant.exe", 999999, null, tcp: true, "127.0.0.1", 54321);
+        });
+        probe.Start();
+        probe.Join();
+        Console.WriteLine($"  {FirewallStatus.RuleCount} règles entrantes actives retenues, {FirewallStatus.PackageRulesSkipped} règles d'applications empaquetées écartées (portée lisible : {FirewallStatus.PackageScopeReadable}) {FirewallStatus.LastError}");
+        Console.WriteLine($"  contrôle programme inexistant TCP 54321 : {negative} ; sur 127.0.0.1 : {loopback}");
+        var why = new List<string>();
+        var explain = new Thread(() => why.AddRange(FirewallStatus.DescribeMatching(@"C:\ResMonNext-controle\inexistant.exe", 999999, true, 54321)));
+        explain.Start();
+        explain.Join();
+        foreach (var line in why.Take(10)) Console.WriteLine($"    règle appliquée : {line}");
         Console.WriteLine($"Réseau : {withNet?.Connections?.Length} connexions TCP, {withNet?.Listeners?.Length} ports d'écoute ; ex. {string.Join(" | ", withNet?.Connections?.Take(3).Select(c => $"{c.Pid} {c.LocalAddress}:{c.LocalPort} -> {c.RemoteAddress}:{c.RemotePort} {c.State}") ?? [])}");
         Console.WriteLine($"Volumes : {string.Join(" | ", snapshots.LastOrDefault(s => s.Volumes is not null)?.Volumes?.Select(v => $"{v.Name} {v.PhysicalDisk} actif {v.ActivePercent:0}% libre {v.FreeBytes >> 30}/{v.TotalBytes >> 30} Go file {v.QueueLength:0.00}") ?? [])}");
         Console.WriteLine("Top E/S :");

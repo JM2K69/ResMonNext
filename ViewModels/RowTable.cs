@@ -191,6 +191,7 @@ public sealed class ListenerTable : RowTable<ListenerRow>
         Column("Address", (a, b) => string.CompareOrdinal(a.Address, b.Address));
         Column("Port", (a, b) => a.Port.CompareTo(b.Port));
         Column("Protocol", (a, b) => string.CompareOrdinal(a.Protocol, b.Protocol));
+        Column("Firewall", (a, b) => string.CompareOrdinal(a.Firewall, b.Firewall));
     }
 }
 

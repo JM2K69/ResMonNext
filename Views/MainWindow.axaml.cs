@@ -91,6 +91,7 @@ public partial class MainWindow : Window
         await Task.Delay(9000);
         await Shot(4, "reseau");
         await Shot(4, "reseau-connexions", () => NetScroll.Offset = new Vector(0, 640));
+        await Shot(4, "reseau-ports", () => NetScroll.ScrollToEnd());
         await Shot(3, "disque");
         if (DataContext is MainViewModel vm) vm.CheckProcess(Environment.ProcessId);
         Nav.SelectedIndex = 1;

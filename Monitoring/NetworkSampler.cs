@@ -10,7 +10,9 @@ public sealed record ConnectionSample(int Pid, string LocalAddress, int LocalPor
     public string Key => $"{Pid}|{LocalAddress}|{LocalPort}|{RemoteAddress}|{RemotePort}";
 }
 
-public sealed record ListenerSample(int Pid, string Protocol, string Address, int Port)
+/// <param name="RawAddress">Adresse d'écoute brute (null = toutes les adresses), transmise au pare-feu.</param>
+public sealed record ListenerSample(int Pid, string Protocol, string Address, int Port, string? RawAddress = null, bool V6 = false,
+    string Firewall = "")
 {
     public string Key => $"{Pid}|{Protocol}|{Address}|{Port}";
 }
@@ -40,7 +42,7 @@ internal static unsafe class NetworkSampler
                 ref var r = ref rows[i];
                 string local = FormatV4(r.dwLocalAddr);
                 if (r.dwState == MIB_TCP_STATE_LISTEN)
-                    listeners.Add(new ListenerSample((int)r.dwOwningPid, "TCP", local, Port(r.dwLocalPort)));
+                    listeners.Add(new ListenerSample((int)r.dwOwningPid, "TCP", local, Port(r.dwLocalPort), RawV4(r.dwLocalAddr)));
                 else if (r.dwOwningPid != 0)
                     connections.Add(new ConnectionSample((int)r.dwOwningPid, local, Port(r.dwLocalPort),
                         FormatV4(r.dwRemoteAddr), Port(r.dwRemotePort), TcpState(r.dwState),
@@ -57,7 +59,7 @@ internal static unsafe class NetworkSampler
                 var r = &rows[i];
                 string local = FormatV6(r->ucLocalAddr, r->dwLocalScopeId);
                 if (r->dwState == MIB_TCP_STATE_LISTEN)
-                    listeners.Add(new ListenerSample((int)r->dwOwningPid, "TCP", local, Port(r->dwLocalPort)));
+                    listeners.Add(new ListenerSample((int)r->dwOwningPid, "TCP", local, Port(r->dwLocalPort), RawV6(r->ucLocalAddr), true));
                 else if (r->dwOwningPid != 0)
                     connections.Add(new ConnectionSample((int)r->dwOwningPid, local, Port(r->dwLocalPort),
                         FormatV6(r->ucRemoteAddr, r->dwRemoteScopeId), Port(r->dwRemotePort), TcpState(r->dwState),
@@ -70,7 +72,8 @@ internal static unsafe class NetworkSampler
             uint count = *(uint*)buffer;
             var rows = (MIB_UDPROW_OWNER_PID*)(buffer + 4);
             for (int i = 0; i < count; i++)
-                listeners.Add(new ListenerSample((int)rows[i].dwOwningPid, "UDP", FormatV4(rows[i].dwLocalAddr), Port(rows[i].dwLocalPort)));
+                listeners.Add(new ListenerSample((int)rows[i].dwOwningPid, "UDP", FormatV4(rows[i].dwLocalAddr), Port(rows[i].dwLocalPort),
+                    RawV4(rows[i].dwLocalAddr)));
         });
 
         WithTable(false, Win32.AF_INET6, buffer =>
@@ -78,7 +81,8 @@ internal static unsafe class NetworkSampler
             uint count = *(uint*)buffer;
             var rows = (MIB_UDP6ROW_OWNER_PID*)(buffer + 4);
             for (int i = 0; i < count; i++)
-                listeners.Add(new ListenerSample((int)rows[i].dwOwningPid, "UDP", FormatV6(rows[i].ucLocalAddr, rows[i].dwLocalScopeId), Port(rows[i].dwLocalPort)));
+                listeners.Add(new ListenerSample((int)rows[i].dwOwningPid, "UDP", FormatV6(rows[i].ucLocalAddr, rows[i].dwLocalScopeId), Port(rows[i].dwLocalPort),
+                    RawV6(rows[i].ucLocalAddr), true));
         });
 
         return (connections.ToArray(), listeners.ToArray());
@@ -110,6 +114,14 @@ internal static unsafe class NetworkSampler
 
     /// <summary>Le port est stocké en ordre réseau dans les 16 bits de poids faible.</summary>
     private static int Port(uint value) => (int)(((value & 0xFF) << 8) | ((value >> 8) & 0xFF));
+
+    private static string? RawV4(uint address) => address == 0 ? null : new IPAddress(address).ToString();
+
+    private static string? RawV6(byte* address)
+    {
+        var ip = new IPAddress(new ReadOnlySpan<byte>(address, 16));
+        return ip.Equals(IPAddress.IPv6Any) ? null : ip.ToString();
+    }
 
     internal static string FormatV4(uint address) => address switch
     {
