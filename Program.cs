@@ -30,8 +30,19 @@ internal static class Program
         return 0;
     }
 
-    public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+    /// <summary>« --gpu » (ou RESMONNEXT_GPU=1) réactive le rendu accéléré par la carte graphique.</summary>
+    public static bool GpuRendering { get; } =
+        Environment.GetCommandLineArgs().Contains("--gpu") || Environment.GetEnvironmentVariable("RESMONNEXT_GPU") == "1";
+
+    public static AppBuilder BuildAvaloniaApp()
+    {
+        var builder = AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+        // Rendu logiciel par défaut : le rendu accéléré (ANGLE/Direct3D) coûte ~110 Mo de mémoire privée et ~35 threads
+        // de pilote graphique, pour une interface rafraîchie une fois par seconde (mesuré face à resmon).
+        if (!GpuRendering)
+            builder = builder.With(new Win32PlatformOptions { RenderingMode = [Win32RenderingMode.Software] });
+        return builder;
+    }
 
     /// <summary>Diagnostic sans interface : tailles des structures natives et deux échantillons.</summary>
     private static unsafe int SelfTest()

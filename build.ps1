@@ -2,11 +2,12 @@
 <#
   Publie ResMon Next, sans runtime .NET requis sur le poste cible.
 
-  pwsh .\build.ps1                    # exe unique autonome (aucun prérequis en plus du SDK .NET 10)
+  pwsh .\build.ps1                    # exe unique autonome, non compressé (~62 Mo, aucun prérequis en plus du SDK .NET 10)
   pwsh .\build.ps1 -Aot               # NativeAOT : exe natif + 3 DLL Avalonia (outils C++ de Visual Studio requis)
   pwsh .\build.ps1 -RuntimeIdentifier win-arm64
 
-  Le workflow GitHub Actions (.github/workflows/release.yml) produit les deux formats à chaque tag v*.
+  Le workflow GitHub Actions (.github/workflows/release.yml) publie les deux formats à chaque tag v*
+  (ses runners ont les outils C++ requis par NativeAOT).
 #>
 param(
     [switch]$Aot,
@@ -23,12 +24,15 @@ if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Recurse 
 
 $common = @('-c', 'Release', '-r', $RuntimeIdentifier, '--self-contained', 'true', "-p:Version=$Version", '-o', $output)
 if ($Aot) {
-    dotnet publish $project @common
+    dotnet publish $project @common -p:DebugType=none
+    # Symboles de débogage des bibliothèques natives (Skia, HarfBuzz) : ~100 Mo inutiles à l'exécution.
+    Get-ChildItem $output -Filter *.pdb | Remove-Item
 }
 else {
-    # Fichier unique : runtime .NET + DLL natives intégrés et compressés, code taillé et précompilé (ReadyToRun).
+    # Fichier unique : runtime .NET + DLL natives intégrés, code taillé et précompilé (ReadyToRun).
+    # Non compressé : le code est lu directement depuis l'exe (pas de copie décompressée en mémoire privée, ~23 Mo de moins).
     dotnet publish $project @common -p:PublishAot=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-        -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=true -p:PublishReadyToRun=true -p:DebugType=none
+        -p:EnableCompressionInSingleFile=false -p:PublishTrimmed=true -p:PublishReadyToRun=true -p:DebugType=none
 }
 
 $exe = Join-Path $output 'ResMonNext.exe'
