@@ -48,8 +48,8 @@ public sealed class MainViewModel : ObservableBase, IDisposable
         NetworkProcesses.Filter = r => MatchesSearch(r) && (r.TcpConnections > 0 || r.ListeningPorts > 0 || _tick - r.LastNetTick < 60);
         Files.Filter = f => _checkedPids.Count == 0 || _checkedPids.Contains(f.Pid);
         Addresses.Filter = a => _checkedPids.Count == 0 || _checkedPids.Contains(a.Pid);
-        EtwActive = _sampler.EtwActive;
-        EtwStatus = _sampler.EtwStatus;
+        _etwActive = _sampler.EtwActive;
+        _etwStatus = _sampler.EtwStatus;
         Connections.Filter = c => _checkedPids.Count == 0 || _checkedPids.Contains(c.Pid);
         Listeners.Filter = l => _checkedPids.Count == 0 || _checkedPids.Contains(l.Pid);
         Services.Filter = s => _checkedPids.Count == 0 || _checkedPids.Contains(s.Pid);
@@ -80,8 +80,22 @@ public sealed class MainViewModel : ObservableBase, IDisposable
     }
 
     // ───────────── Trace du noyau (ETW) ─────────────
-    public bool EtwActive { get; }
-    public string EtwStatus { get; }
+    private bool _etwActive;
+    private string _etwStatus = "";
+
+    /// <summary>La trace démarre en arrière-plan après l'affichage : ces propriétés changent alors.</summary>
+    public bool EtwActive
+    {
+        get => _etwActive;
+        private set
+        {
+            if (!Set(ref _etwActive, value)) return;
+            Raise(nameof(DiskProcessesTitle));
+            Raise(nameof(DiskProcessesHint));
+        }
+    }
+
+    public string EtwStatus { get => _etwStatus; private set => Set(ref _etwStatus, value); }
     public string DiskProcessesTitle => EtwActive ? "Processus avec activité disque" : "Processus avec activité d'E/S";
     public string DiskProcessesHint => EtwActive ? "Disque réel (trace du noyau) · actifs depuis 60 s" : "Toutes E/S du processus · actifs depuis 60 s";
     public FileTable Files { get; } = new();
@@ -175,6 +189,8 @@ public sealed class MainViewModel : ObservableBase, IDisposable
     private void Apply(Snapshot s)
     {
         _tick++;
+        EtwActive = s.EtwActive;
+        EtwStatus = s.EtwStatus;
         ApplyProcesses(s.Processes, etwActive: s.Etw is not null);
         if (s.Etw is not null) ApplyEtw(s.Etw);
         if (s.Connections is not null) ApplyNetwork(s.Connections, s.Listeners ?? []);

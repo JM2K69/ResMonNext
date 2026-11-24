@@ -109,7 +109,13 @@ public static unsafe class SystemActions
     {
         try
         {
-            Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Verb = "runas" });
+            // Conserve le choix du mode de rendu (--gpu) dans l'instance élevée.
+            Process.Start(new ProcessStartInfo(Environment.ProcessPath!)
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                Arguments = Program.GpuRendering ? "--gpu" : "",
+            });
             return true;
         }
         catch (Win32Exception)

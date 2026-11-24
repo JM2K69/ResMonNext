@@ -11,7 +11,8 @@ dotnet run -- --page 2           # ouvre un onglet (0 vue d'ensemble … 4 rése
 dotnet run -- --selftest         # diagnostic console : structures natives + échantillons
 ResMonNext.exe --selftest --out rapport.txt   # idem en fichier (utile lancé en administrateur : teste aussi ETW)
 ResMonNext.exe --capture-all dossier          # l'application capture elle-même ses onglets puis se ferme
-pwsh .\build.ps1                 # exe unique autonome (~30 Mo, aucun prérequis en plus du SDK .NET 10)
+ResMonNext.exe --gpu                          # rendu accéléré par la carte graphique (logiciel par défaut)
+pwsh .\build.ps1                 # exe unique autonome (~62 Mo, aucun prérequis en plus du SDK .NET 10)
 pwsh .\build.ps1 -Aot            # NativeAOT (outils C++ de Visual Studio requis)
 ```
 
@@ -24,9 +25,56 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-La release contient `ResMonNext-<version>-win-x64.exe` : un fichier unique autonome (runtime .NET et DLL natives
-intégrés, code taillé et précompilé), à copier n'importe où. Chaque build exécute son autotest (en administrateur
-sur le runner, donc trace ETW comprise). La version NativeAOT reste disponible en local (`build.ps1 -Aot`).
+| Fichier | Contenu |
+|---|---|
+| `ResMonNext-<version>-win-x64-aot.zip` | **recommandé** — NativeAOT : exe natif + 3 DLL Avalonia (Skia, HarfBuzz, ANGLE), démarrage le plus rapide, le plus léger ; idéal pour un déploiement |
+| `ResMonNext-<version>-win-x64.exe` | fichier unique autonome (runtime .NET et DLL natives intégrés, code taillé et précompilé, non compressé), à copier n'importe où |
+
+Chaque build exécute l'autotest des deux formats (en administrateur sur le runner, donc trace ETW comprise).
+
+## Performances
+
+Mesures sur un poste 16 cœurs, écran à 200 %, fenêtre sur la vue d'ensemble, rafraîchissement 1 s.
+
+| Exe unique, sans droits admin | Démarrage | Processeur | Mémoire privée | Threads |
+|---|---|---|---|---|
+| Rendu accéléré (ANGLE/Direct3D), compressé — v0.2.0 | 670 ms | 0,66 % | 243 Mo | 52 |
+| **Rendu logiciel, non compressé — par défaut** | **550-700 ms** | 0,83 % | **112 Mo** | **16** |
+
+Le code .NET de l'application ne pèse que 30 à 45 Mo : l'essentiel venait du pilote graphique (~110 Mo, ~35 threads),
+inutile pour une interface rafraîchie une fois par seconde, et de la décompression de l'exe en mémoire (~23 Mo).
+`--gpu` réactive le rendu accéléré.
+
+Face au Moniteur de ressources de Windows, en administrateur (trace du noyau active des deux côtés), 3 démarrages
+puis 60 s de mesure après 10 s de stabilisation :
+
+| | resmon (perfmon.exe) | ResMon Next 0.2.0 | Exe unique (rendu logiciel) | NativeAOT (rendu logiciel) |
+|---|---|---|---|---|
+| Fenêtre affichée | 0,55-0,61 s | 0,80-1,03 s | **0,53-0,55 s** | — ¹ |
+| Fenêtre prête | 0,56-0,61 s | 0,80-1,03 s | **0,62-0,63 s** | — ¹ |
+| Processeur | 0,7-0,9 % | 0,54 % | 0,8 % | **0,55 %** |
+| Mémoire privée | 55-58 Mo | 278 Mo | 141-144 Mo | **129 Mo** |
+| Plage de travail | 82-85 Mo | 346 Mo | 204-207 Mo | **164 Mo** |
+
+¹ Non remesuré depuis que les compteurs et la trace du noyau démarrent en arrière-plan ; sans droits admin,
+NativeAOT démarre 0,15 à 0,3 s plus vite que l'exe unique (0,44-0,56 s).
+
+Les compteurs de performance et la trace du noyau sont initialisés sur le thread de collecte, après l'affichage :
+la fenêtre apparaît aussi vite que celle de resmon, les tableaux détaillés (disque par fichier, réseau par adresse)
+une à deux secondes plus tard. ResMon Next consomme autant de processeur que resmon (moins en NativeAOT) mais
+reste 2,2 à 2,5 fois plus gourmand en mémoire (runtime .NET, moteur de rendu Skia).
+
+Effet de NativeAOT, mesuré à code identique (v0.1.0, sans droits admin) :
+
+| | Exe unique (compressé) | NativeAOT |
+|---|---|---|
+| Démarrage | 0,77-1,12 s | **0,39-0,50 s** |
+| Processeur | 0,62 % | **0,44 %** |
+| Mémoire privée | 250 Mo | **208 Mo** |
+| Plage de travail | 324 Mo | **254 Mo** |
+
+Plus de compilation à la volée : démarrage deux fois plus rapide (plus rapide que resmon) et moins de processeur
+en continu. C'est pourquoi le zip NativeAOT est le format recommandé.
 
 ## Couverture de resmon
 

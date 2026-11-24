@@ -20,10 +20,11 @@ public sealed unsafe class Sampler : IDisposable
     private readonly Dictionary<ProcessKey, History> _history = new();
     private readonly Dictionary<ProcessKey, (string? Path, string Description)> _identity = new();
     private readonly ServiceSampler _services = new();
-    private readonly PdhQuery _pdh = new();
-    private readonly PdhCounter? _frequency, _diskBytes, _diskIdle, _netBytes, _netBandwidth;
-    private readonly PdhCounter? _logicalIdle, _logicalQueue, _physicalIdle;
-    private readonly PdhCounter? _modified, _standbyCore, _standbyNormal, _standbyReserve, _freeZero;
+    // Initialisés sur le thread de collecte (le chargement des compteurs PDH peut être lent).
+    private PdhQuery? _pdh;
+    private PdhCounter? _frequency, _diskBytes, _diskIdle, _netBytes, _netBandwidth;
+    private PdhCounter? _logicalIdle, _logicalQueue, _physicalIdle;
+    private PdhCounter? _modified, _standbyCore, _standbyNormal, _standbyReserve, _freeZero;
 
     private byte[] _processBuffer = new byte[2 * 1024 * 1024];
     private SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION[] _coreBuffer;
@@ -34,11 +35,11 @@ public sealed unsafe class Sampler : IDisposable
     private ulong _installedBytes;
 
     private volatile bool _paused;
-    private readonly KernelTrace? _trace;
+    private volatile KernelTrace? _trace;
     private Dictionary<uint, int>? _threadMap;
 
-    /// <summary>État de la trace ETW, affiché dans l'interface.</summary>
-    public string EtwStatus { get; }
+    /// <summary>État de la trace ETW, affiché dans l'interface (mis à jour quand la trace démarre).</summary>
+    public string EtwStatus { get; private set; }
 
     public bool EtwActive => _trace is not null;
 
@@ -55,7 +56,16 @@ public sealed unsafe class Sampler : IDisposable
     public Sampler()
     {
         _coreBuffer = new SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION[Math.Max(_cpuCount, 1)];
+        // Rien de coûteux ici : le constructeur s'exécute sur le thread de l'interface, avant l'affichage de la fenêtre.
+        EtwStatus = SystemActions.IsElevated
+            ? "Démarrage de la trace du noyau…"
+            : "Trace du noyau inactive (droits administrateur requis)";
+        _thread = new Thread(Run) { IsBackground = true, Name = "ResMonNext.Sampler" };
+    }
 
+    private void InitializeCounters()
+    {
+        _pdh = new PdhQuery();
         _frequency = _pdh.Add(@"\Processor Information(_Total)\% Processor Performance");
         _diskBytes = _pdh.Add(@"\PhysicalDisk(_Total)\Disk Bytes/sec");
         _diskIdle = _pdh.Add(@"\PhysicalDisk(_Total)\% Idle Time");
@@ -72,27 +82,28 @@ public sealed unsafe class Sampler : IDisposable
 
         ulong installedKb;
         if (Win32.GetPhysicallyInstalledSystemMemory(&installedKb)) _installedBytes = installedKb * 1024;
+    }
 
-        if (SystemActions.IsElevated)
-        {
-            Privileges.EnableDebugPrivilege();
-            _trace = KernelTrace.TryStart(out var error);
-            EtwStatus = _trace is not null ? "Trace du noyau active" : error ?? "Trace du noyau indisponible";
-        }
-        else
-        {
-            EtwStatus = "Trace du noyau inactive (droits administrateur requis)";
-        }
-
-        _thread = new Thread(Run) { IsBackground = true, Name = "ResMonNext.Sampler" };
+    /// <summary>
+    /// Démarre la trace du noyau (administrateur) après le premier instantané : la fenêtre s'affiche sans attendre,
+    /// les tableaux détaillés (disque par fichier, réseau par adresse) apparaissent dès que la trace est prête.
+    /// </summary>
+    private void StartKernelTrace()
+    {
+        Privileges.EnableDebugPrivilege();
+        var trace = KernelTrace.TryStart(out var error);
+        EtwStatus = trace is not null ? "Trace du noyau active" : error ?? "Trace du noyau indisponible";
+        _trace = trace;
     }
 
     public void Start() => _thread.Start();
 
     private void Run()
     {
+        InitializeCounters();
         // Premier passage immédiat (valeurs de taux à zéro) pour que l'interface se remplisse tout de suite.
         Publish();
+        if (SystemActions.IsElevated && !_stop.IsSet) StartKernelTrace();
         while (!_stop.Wait(Interval))
         {
             if (!_paused) Publish();
@@ -118,7 +129,7 @@ public sealed unsafe class Sampler : IDisposable
         double elapsed = _lastTimestamp == 0 ? 0 : Stopwatch.GetElapsedTime(_lastTimestamp, now).TotalSeconds;
         _lastTimestamp = now;
 
-        _pdh.Collect();
+        _pdh?.Collect();
         if (_tick % 2 == 1) _hungPids = FindHungProcesses();
 
         var processes = CollectProcesses(elapsed, out double totalHardFaults);
@@ -157,6 +168,8 @@ public sealed unsafe class Sampler : IDisposable
             Volumes = slowTick ? CollectVolumes() : null,
             Etw = etw,
             LatencyAvailable = _trace is not null && !TcpLatency.IsBroken,
+            EtwActive = _trace is not null,
+            EtwStatus = EtwStatus,
         };
     }
 
@@ -527,7 +540,7 @@ public sealed unsafe class Sampler : IDisposable
         _stop.Set();
         if (_thread.IsAlive) _thread.Join(2000);
         _trace?.Dispose();
-        _pdh.Dispose();
+        _pdh?.Dispose();
     }
 
     private sealed class History
