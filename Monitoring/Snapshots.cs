@@ -88,5 +88,7 @@ public sealed class Snapshot
     /// <summary>Données de la trace ETW du noyau (null sans droits administrateur).</summary>
     public EtwSample? Etw { get; init; }
     public bool LatencyAvailable { get; init; }
+    public bool EtwActive { get; init; }
+    public string EtwStatus { get; init; } = "";
     public DateTime Timestamp { get; init; }
 }

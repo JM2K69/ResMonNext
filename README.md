@@ -48,15 +48,21 @@ inutile pour une interface rafraîchie une fois par seconde, et de la décompres
 Face au Moniteur de ressources de Windows, en administrateur (trace du noyau active des deux côtés), 3 démarrages
 puis 60 s de mesure après 10 s de stabilisation :
 
-| | resmon (perfmon.exe) | ResMon Next 0.2.0 | ResMon Next (rendu logiciel) |
-|---|---|---|---|
-| Démarrage (fenêtre prête) | 0,49-0,61 s | 0,80-1,03 s | 0,69-0,72 s |
-| Processeur | 0,7-0,9 % | 0,54 % | 0,79 % |
-| Mémoire privée | 55 Mo | 278 Mo | 140 Mo |
-| Plage de travail | 82 Mo | 346 Mo | 203 Mo |
+| | resmon (perfmon.exe) | ResMon Next 0.2.0 | Exe unique (rendu logiciel) | NativeAOT (rendu logiciel) |
+|---|---|---|---|---|
+| Fenêtre affichée | 0,55-0,61 s | 0,80-1,03 s | **0,53-0,55 s** | — ¹ |
+| Fenêtre prête | 0,56-0,61 s | 0,80-1,03 s | **0,62-0,63 s** | — ¹ |
+| Processeur | 0,7-0,9 % | 0,54 % | 0,8 % | **0,55 %** |
+| Mémoire privée | 55-58 Mo | 278 Mo | 141-144 Mo | **129 Mo** |
+| Plage de travail | 82-85 Mo | 346 Mo | 204-207 Mo | **164 Mo** |
 
-ResMon Next consomme autant de processeur que resmon mais reste ~2,5 fois plus gourmand en mémoire (runtime .NET,
-moteur de rendu Skia).
+¹ Non remesuré depuis que les compteurs et la trace du noyau démarrent en arrière-plan ; sans droits admin,
+NativeAOT démarre 0,15 à 0,3 s plus vite que l'exe unique (0,44-0,56 s).
+
+Les compteurs de performance et la trace du noyau sont initialisés sur le thread de collecte, après l'affichage :
+la fenêtre apparaît aussi vite que celle de resmon, les tableaux détaillés (disque par fichier, réseau par adresse)
+une à deux secondes plus tard. ResMon Next consomme autant de processeur que resmon (moins en NativeAOT) mais
+reste 2,2 à 2,5 fois plus gourmand en mémoire (runtime .NET, moteur de rendu Skia).
 
 Effet de NativeAOT, mesuré à code identique (v0.1.0, sans droits admin) :
 
